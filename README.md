@@ -25,3 +25,11 @@ se descarga solo la primera vez que hagas una pregunta.
 - Usa audífonos para evitar que se duplique el audio.
 - Graba conversaciones solo con el consentimiento de los participantes, según la ley de tu país.
 - Las respuestas de la IA pueden equivocarse, sobre todo en llamadas largas: verifica los datos importantes.
+
+## Licencias
+- El código de este proyecto es [MIT](LICENSE).
+- Los modelos no se incluyen en el repositorio: se descargan en tu PC y tienen sus propias licencias
+  (Whisper, Argos Translate y Qwen). En particular, `qwen2.5:3b` tiene una licencia de uso no comercial:
+  si vas a usar el programa con fines comerciales, revisa su licencia o cambia `MODELO` en `transcriptor.py`
+  por otro modelo de Ollama con licencia permisiva.
+- La imagen del avatar (Tole Tole) no es de mi autoría; si tienes los derechos y quieres que se retire, avísame.
