@@ -390,6 +390,45 @@ class Asistente:
         return total
 
 
+C_CHAT = "#e3efec"        # fondo del chat
+C_MIA = "#d6f3cc"         # globo del usuario (verde suave)
+C_IA = "#ffffff"          # globo de la IA
+
+
+class Burbuja(tk.Canvas):
+    """Globo de chat con esquinas redondeadas (estilo WhatsApp)."""
+
+    def __init__(self, parent, texto, color, wrap, hora):
+        super().__init__(parent, bg=C_CHAT, highlightthickness=0, bd=0)
+        self.color, self.pad = color, 10
+        self.marco = tk.Frame(self, bg=color)
+        self.lbl = tk.Label(self.marco, text=texto, bg=color, fg=C_TEXTO, font=(FUENTE, 10),
+                            justify="left", anchor="w", wraplength=wrap)
+        self.lbl.pack(anchor="w")
+        tk.Label(self.marco, text=hora, bg=color, fg="#7d8c8e", font=(FUENTE, 8)).pack(anchor="e")
+        self.create_window(self.pad, self.pad - 3, window=self.marco, anchor="nw")
+        self.marco.bind("<Configure>", self._dibujar)
+
+    def _dibujar(self, _e=None):
+        w = self.marco.winfo_reqwidth() + 2 * self.pad
+        h = self.marco.winfo_reqheight() + 2 * self.pad - 6
+        self.config(width=w, height=h)
+        self.delete("fondo")
+        r = 14
+        pts = [r, 0, w - r, 0, w, 0, w, r, w, h - r, w, h, w - r, h, r, h, 0, h, 0, h - r, 0, r, 0, 0]
+        self.create_polygon(pts, smooth=True, fill=self.color, outline=self.color, tags="fondo")
+        self.tag_lower("fondo")
+
+    def poner(self, t):
+        self.lbl.config(text=t)
+
+    def agregar(self, t):
+        self.lbl.config(text=self.lbl.cget("text") + t)
+
+    def ajustar(self, wrap):
+        self.lbl.config(wraplength=wrap)
+
+
 class App:
     def __init__(self, root):
         self.root = root
@@ -497,7 +536,7 @@ class App:
         sb.pack(side="right", fill="y")
         self.texto = tk.Text(cuerpo, wrap="none", font=(FUENTE, 11), bg=C_PELO, fg=C_TEXTO,
                              relief="flat", borderwidth=0, highlightthickness=0, padx=14, pady=10,
-                             yscrollcommand=sb.set, cursor="arrow", state="disabled")
+                             yscrollcommand=sb.set, cursor="arrow", state="disabled", height=1)
         sb.config(command=self.texto.yview)
         self.texto.pack(side="left", fill="both", expand=True)
         self.texto.bind("<Configure>", self._ajustar)
@@ -521,59 +560,108 @@ class App:
     def _panel_ia(self, paned):
         marco = tk.Frame(paned, bg=C_TARJETA, highlightthickness=1, highlightbackground=C_BORDE)
         paned.add(marco, weight=2)
-        cab = tk.Frame(marco, bg=C_TARJETA)
-        cab.pack(fill="x", padx=18, pady=(10, 6))
-        tk.Label(cab, text="ASISTENTE IA", bg=C_TARJETA, fg=C_SUAVE, font=(FUENTE + " Semibold", 9)).pack(side="left")
-        tk.Label(cab, text="local · gratis", bg=C_TARJETA, fg=C_PASTO, font=(FUENTE, 9)).pack(side="right")
-        tk.Frame(marco, bg=C_BORDE, height=1).pack(fill="x")
+        self.burbujas = []
+        self._chat_vacio = False
 
-        rapidos = tk.Frame(marco, bg=C_TARJETA)
-        rapidos.pack(fill="x", padx=12, pady=(8, 2))
-        for txt, preg in (("Resumen", "Hazme un resumen de la llamada."),
-                          ("Puntos clave", "Dame los puntos clave de la llamada en una lista."),
-                          ("Pendientes", "¿Qué tareas o acuerdos pendientes hay?")):
-            ttk.Button(rapidos, text=txt, style="Suave.TButton",
-                       command=lambda q=preg: self.preguntar_ia(q)).pack(side="left", padx=3)
+        # ---- cabecera tipo contacto ----
+        cab = tk.Frame(marco, bg=C_CIELO)
+        cab.pack(fill="x")
+        try:
+            self.avatar_ia = self.avatar_chico.subsample(2, 2)   # 32 px
+            tk.Label(cab, image=self.avatar_ia, bg=C_CIELO).pack(side="left", padx=(12, 8), pady=8)
+        except Exception:
+            tk.Label(cab, text="🐾", bg=C_CIELO, fg="white", font=(FUENTE, 16)).pack(side="left", padx=(12, 8))
+        datos = tk.Frame(cab, bg=C_CIELO)
+        datos.pack(side="left", pady=6)
+        tk.Label(datos, text="Tole Tole", bg=C_CIELO, fg="white", font=(FUENTE + " Semibold", 11)).pack(anchor="w")
+        self.ia_estado = tk.Label(datos, text="en línea · IA local gratis", bg=C_CIELO, fg="#d9f2f1",
+                                  font=(FUENTE, 8))
+        self.ia_estado.pack(anchor="w")
 
-        cuerpo = tk.Frame(marco, bg=C_PELO)
-        cuerpo.pack(fill="both", expand=True, pady=(6, 0))
+        # ---- mensajes ----
+        cuerpo = tk.Frame(marco, bg=C_CHAT)
+        cuerpo.pack(fill="both", expand=True)
         sb = ttk.Scrollbar(cuerpo, orient="vertical")
         sb.pack(side="right", fill="y")
-        self.chat = tk.Text(cuerpo, wrap="word", font=(FUENTE, 10), bg=C_PELO, fg=C_TEXTO, relief="flat",
-                            borderwidth=0, highlightthickness=0, padx=14, pady=10, state="disabled",
-                            yscrollcommand=sb.set, cursor="arrow", spacing3=4)
+        self.chat = tk.Text(cuerpo, wrap="none", font=(FUENTE, 10), bg=C_CHAT, fg=C_TEXTO, relief="flat",
+                            borderwidth=0, highlightthickness=0, padx=10, pady=8, state="disabled",
+                            yscrollcommand=sb.set, cursor="arrow", height=1)
         sb.config(command=self.chat.yview)
         self.chat.pack(side="left", fill="both", expand=True)
-        self.chat.tag_config("preg", foreground="white", background=C_CIELO, lmargin1=8, lmargin2=8,
-                             rmargin=8, spacing1=10, spacing3=6, font=(FUENTE + " Semibold", 10))
-        self.chat.tag_config("resp", foreground=C_TEXTO, lmargin1=8, lmargin2=8, rmargin=8)
-        self.chat.tag_config("nota", foreground=C_SUAVE, justify="center", spacing1=60, font=(FUENTE, 10))
+        self.chat.bind("<Configure>", self._ajustar_chat)
+        self.chat.tag_config("der", justify="right", rmargin=6, spacing1=8)
+        self.chat.tag_config("izq", justify="left", lmargin1=6, spacing1=8)
+        self.chat.tag_config("centro", justify="center", spacing1=70, foreground=C_SUAVE, font=(FUENTE, 10))
         self._chat_nota("🐾\nPregúntale a Tole Tole sobre la llamada.\nFunciona en tu PC, sin gastar nada.")
 
-        fila = tk.Frame(marco, bg=C_TARJETA)
-        fila.pack(fill="x", padx=12, pady=10)
-        self.ia_entrada = ttk.Entry(fila, font=(FUENTE, 10))
-        self.ia_entrada.pack(side="left", fill="x", expand=True, ipady=5)
+        # ---- atajos ----
+        rapidos = tk.Frame(marco, bg=C_CHAT)
+        rapidos.pack(fill="x", padx=8)
+        for txt, preg in (("📝 Resumen", "Hazme un resumen de la llamada."),
+                          ("📌 Puntos clave", "Dame los puntos clave de la llamada en una lista."),
+                          ("✅ Pendientes", "¿Qué tareas o acuerdos pendientes hay?")):
+            tk.Button(rapidos, text=txt, command=lambda q=preg: self.preguntar_ia(q), bg="white", fg=C_CIELO_OSC,
+                      activebackground="#d9ecea", relief="flat", bd=0, padx=10, pady=3, cursor="hand2",
+                      font=(FUENTE, 9)).pack(side="left", padx=3, pady=(6, 4))
+
+        # ---- barra de escritura ----
+        barra = tk.Frame(marco, bg=C_CHAT)
+        barra.pack(fill="x", padx=8, pady=(2, 8))
+        caja = tk.Frame(barra, bg="white", highlightthickness=1, highlightbackground=C_BORDE)
+        caja.pack(side="left", fill="x", expand=True)
+        self.ia_entrada = tk.Entry(caja, font=(FUENTE, 11), relief="flat", bd=0, bg="white", fg=C_TEXTO,
+                                   insertbackground=C_TEXTO)
+        self.ia_entrada.pack(fill="x", padx=12, pady=9)
         self.ia_entrada.bind("<Return>", lambda e: self.preguntar_ia())
-        self.btn_ia = ttk.Button(fila, text="Enviar", style="Principal.TButton", command=self.preguntar_ia)
+        self.btn_ia = tk.Canvas(barra, width=40, height=40, bg=C_CHAT, highlightthickness=0, cursor="hand2")
         self.btn_ia.pack(side="left", padx=(8, 0))
+        self._btn_circ = self.btn_ia.create_oval(2, 2, 38, 38, fill=C_CIELO, outline=C_CIELO)
+        self.btn_ia.create_text(20, 20, text="➤", fill="white", font=(FUENTE, 13))
+        self.btn_ia.bind("<Button-1>", lambda e: self.preguntar_ia())
+
+    def _ia_boton(self, ocupado):
+        col = "#9fb3b5" if ocupado else C_CIELO
+        self.btn_ia.itemconfig(self._btn_circ, fill=col, outline=col)
+        self.btn_ia.config(cursor="arrow" if ocupado else "hand2")
+
+    def _ancho_globo(self):
+        return max(150, min(400, self.chat.winfo_width() - 90))
+
+    def _ajustar_chat(self, _e=None):
+        for b in self.burbujas:
+            b.ajustar(self._ancho_globo())
 
     def _chat_nota(self, t):
         self.chat.config(state="normal")
-        self.chat.insert("end", t, "nota")
+        self.chat.insert("end", t, "centro")
         self.chat.config(state="disabled")
         self._chat_vacio = True
 
-    def _chat_add(self, texto, tag):
-        def _u():
-            self.chat.config(state="normal")
-            if getattr(self, "_chat_vacio", False):
-                self.chat.delete("1.0", "end")
-                self._chat_vacio = False
-            self.chat.insert("end", texto, tag)
-            self.chat.config(state="disabled")
-            self.chat.see("end")
-        self.root.after(0, _u)
+    def _chat_burbuja(self, texto, mia):
+        t = self.chat
+        t.config(state="normal")
+        if self._chat_vacio:
+            t.delete("1.0", "end")
+            self._chat_vacio = False
+        b = Burbuja(t, texto, C_MIA if mia else C_IA, self._ancho_globo(), datetime.datetime.now().strftime("%H:%M"))
+        self.burbujas.append(b)
+        self._rueda(b, t)
+        pos = t.index("end-1c")
+        t.window_create(pos, window=b)
+        t.insert("end", "\n")
+        t.tag_add("der" if mia else "izq", pos, "end-1c")
+        t.config(state="disabled")
+        t.after_idle(lambda: t.see("end"))
+        return b
+
+    def _stream(self, holder, texto):
+        b = holder["b"]
+        if holder.get("vacio"):
+            b.poner(texto)
+            holder["vacio"] = False
+        else:
+            b.agregar(texto)
+        self.chat.after_idle(lambda: self.chat.see("end"))
 
     def preguntar_ia(self, pregunta=None):
         pregunta = (pregunta or self.ia_entrada.get()).strip()
@@ -581,29 +669,40 @@ class App:
             return
         self.ia_entrada.delete(0, "end")
         self.ia_ocupada = True
-        self.btn_ia.config(state="disabled")
-        self._chat_add(f" {pregunta} \n", "preg")
+        self._ia_boton(True)
+        self.ia_estado.config(text="escribiendo…")
+        self._chat_burbuja(pregunta, True)
         threading.Thread(target=self._responder, args=(pregunta,), daemon=True).start()
 
     def _responder(self, pregunta):
+        holder = {"vacio": True}
+
+        def crear():
+            holder["b"] = self._chat_burbuja("…", False)
+        self.root.after(0, crear)
+
+        def en_chat(x):
+            self.root.after(0, lambda: self._stream(holder, x))
+
+        def aviso(t):
+            self.set_estado(t)
+            self.root.after(0, lambda: self.ia_estado.config(text="preparando…"))
         try:
             if not self.ia_listo:
-                self._chat_add("Preparando la IA local...\n", "resp")
-                self.ia.preparar(self.set_estado)
+                self.ia.preparar(aviso)
                 self.ia_listo = True
                 self.set_estado("IA lista.")
             tx = "\n".join(f"[{h}] {q}: {t}" for h, q, t in self.historial_tx)
-            r = self.ia.preguntar(tx, pregunta, self.ia_chat, lambda x: self._chat_add(x, "resp"))
+            r = self.ia.preguntar(tx, pregunta, self.ia_chat, en_chat)
             self.ia_chat += [{"role": "user", "content": pregunta}, {"role": "assistant", "content": r}]
-            self._chat_add("\n", "resp")
             if self.archivo and not self.archivo.closed:
                 self.archivo.write(f"\n[IA] Pregunta: {pregunta}\n[IA] Respuesta: {r}\n\n")
                 self.archivo.flush()
         except Exception as e:
-            self._chat_add(f"No se pudo usar la IA: {e}\n", "resp")
+            en_chat(f"No se pudo usar la IA: {e}")
         finally:
             self.ia_ocupada = False
-            self.root.after(0, lambda: self.btn_ia.config(state="normal"))
+            self.root.after(0, lambda: (self._ia_boton(False), self.ia_estado.config(text="en línea · IA local gratis")))
 
     # ---------- utilidades UI ----------
     def _estilos(self):
@@ -630,11 +729,12 @@ class App:
                     bordercolor=C_PELO, arrowcolor=C_PELO, relief="flat")
         s.map("Vertical.TScrollbar", background=[("active", C_CIELO)])
 
-    def _rueda(self, w):
-        """Que la rueda del mouse mueva la transcripcion aunque este sobre una tarjeta."""
-        w.bind("<MouseWheel>", lambda e: (self.texto.yview_scroll(int(-e.delta / 120) * 3, "units"), "break")[1])
+    def _rueda(self, w, vista=None):
+        """Que la rueda del mouse mueva la lista aunque este sobre una tarjeta o globo."""
+        vista = vista or self.texto
+        w.bind("<MouseWheel>", lambda e: (vista.yview_scroll(int(-e.delta / 120) * 3, "units"), "break")[1])
         for h in w.winfo_children():
-            self._rueda(h)
+            self._rueda(h, vista)
 
     def _ajustar(self, _e=None):
         ancho = max(200, self.texto.winfo_width() - 130)
