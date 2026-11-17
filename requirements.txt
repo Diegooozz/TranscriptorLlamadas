@@ -1,0 +1,7 @@
+faster-whisper
+PyAudioWPatch
+sentencepiece
+# Opcional, para usar GPU NVIDIA (mucho mas rapido):
+nvidia-cublas-cu12
+nvidia-cudnn-cu12>=9,<10
+numpy
